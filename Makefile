@@ -3,7 +3,7 @@ COQINCLUDES= -R . Games
 COQC="$(COQBIN)coqc" -q $(COQINCLUDES)
 COQDEP="$(COQBIN)coqdep" $(COQINCLUDES)
 
-COQFILES := Utils Games ITrees_as_games ITrees_as_games_informative examples
+COQFILES := Utils Ghica Games ITrees_as_games ITrees_as_games_informative examples
 VFILES := $(COQFILES:%=%.v)
 VOFILES := $(COQFILES:%=%.vo)
 GLOBFILES := $(COQFILES:%=%.glob)

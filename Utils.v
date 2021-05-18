@@ -28,7 +28,7 @@ Ltac flatten_all :=
 Inductive prefix {A: Type}: relation (list A) :=
 | Nil_Prefix: forall l, prefix [] l
 | Cons_Prefix: forall l x l', prefix l l' -> prefix (x :: l) (x :: l').
-Hint Constructors prefix.
+#[export] Hint Constructors prefix : core.
 Infix "⊑" := prefix (at level 40).
 
 Infix "∈" := In (at level 40).
@@ -49,16 +49,16 @@ Fixpoint view {X: Type} (xs: list X): snoc_view xs :=
     end
   end.
 
-Lemma snoc_not_nil_l: forall {A: Type} (xs: list A) x, [] = snoc xs x -> False.
+Lemma snoc_not_nil_l: forall {A: Type} (xs: list A) x, [] <> snoc xs x.
 Proof.
   intros ? xs ? abs; destruct xs; inv abs.
 Qed.
 
-Lemma snoc_not_nil_r: forall {A: Type} (xs: list A) x, snoc xs x = [] -> False.
+Lemma snoc_not_nil_r: forall {A: Type} (xs: list A) x, snoc xs x <> [].
 Proof.
   intros ? xs ? abs; destruct xs; inv abs.
 Qed.
-Hint Resolve snoc_not_nil_l snoc_not_nil_r.
+#[export] Hint Resolve snoc_not_nil_l snoc_not_nil_r : core.
 
 Lemma snoc_inj : forall {A: Type} (xs ys: list A) x y
                    (EQ: snoc xs x = snoc ys y),
@@ -67,9 +67,9 @@ Proof.
   induction xs as [| x' xs IH]; cbn; intros.
   - destruct ys as [| ys y']; [inv EQ; auto |].
     inv EQ.
-    exfalso; eauto.
+    apply snoc_not_nil_l in H1; inv H1.
   - destruct ys as [| ys y']; eauto; cbn in *.
-    + destruct xs; inv EQ; exfalso; eauto. 
+    + destruct xs; inv EQ; exfalso; eauto.
     + inv EQ; edestruct IH; eauto; subst; auto.
 Qed.
 
@@ -81,12 +81,12 @@ Lemma snoc_inv: forall {X: Type} (xs: list X),
 Proof.
   induction xs as [| x xs IH] using rev_ind; cbn; eauto.
   right; destruct IH as [-> | (? & ? & ->)].
-  exists []; eexists; reflexivity. 
-  do 2 eexists; reflexivity. 
+  exists []; eexists; reflexivity.
+  do 2 eexists; reflexivity.
 Qed.
 
 Ltac destruct_snoc xs :=
-  generalize (snoc_inv xs); intros [-> | (? & ? & ->)]. 
+  generalize (snoc_inv xs); intros [-> | (? & ? & ->)].
 
 Lemma prefix_snoc: forall {X: Type} (xs xs': list X) x,
     xs' ⊑ snoc xs x ->
@@ -119,7 +119,7 @@ Section Relations.
     Definition FF {A: Type}: pred A := fun _ => False.
 
     Inductive Sum_Pred {A B: Type} (P1: pred A) (P2: pred B): pred (A + B) :=
-    | Sum_Pred_L: forall a, P1 a -> Sum_Pred P1 P2 (inl a) 
+    | Sum_Pred_L: forall a, P1 a -> Sum_Pred P1 P2 (inl a)
     | Sum_Pred_R: forall b, P2 b -> Sum_Pred P1 P2 (inr b).
 
     Inductive Inl_Pred {A B: Type} (P1: pred A): pred (A + B) :=

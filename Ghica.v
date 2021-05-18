@@ -4,9 +4,10 @@ From Games Require Import
 From Coq Require Import
      List
      Relations
-     Nat.
+     PeanoNat
+     Nat
+     Lia.
 Import ListNotations.
-Require Import Omega.
 (**
    We now implement "The far side of the cube" as described by Dan R. Ghica.
    It is stated as being the simplest traditional game semantics in the sense
@@ -32,7 +33,7 @@ Section Arena.
 
   Class Arena :=
     {
-      M:> Type;
+      M: Type;
       Q: M -> Prop;
       O: M -> Prop;
       I: M -> Prop;
@@ -114,11 +115,10 @@ Section Arena_Constructs.
     Definition Sub_Arena (A : Arena) (P : M -> Prop) :=
       {|
         M := {m : M | P m};
-        Q := fun m => match m with exist _ m' _  => Q m' end;
-        O := fun m => match m with exist _ m' _ => O m' end;
-        I := fun m => match m with exist _ m' _ => I m' end;
-        enable := fun m n => match m with exist _ m' _  => match n with exist _ n' _  => enable m' n' end end;
-
+        Q := fun m => Q (proj1_sig m);
+        O := fun m => O (proj1_sig m);
+        I := fun m => I (proj1_sig m);
+        enable := fun m n => enable (proj1_sig m) (proj1_sig n)
       |}.
 
 End Arena_Constructs.
@@ -131,28 +131,31 @@ Infix "↪" := Arrow_Arena (at level 11, right associativity).
    Prove that 1 is indeed a unit for the product and arrow.
  *)
 
-Definition bijection {A B : Type} (f : A -> B) :=
-  (forall x y, f x = f y -> x = y) /\ (forall y, exists x, f x = y).
+Definition bijection {A B : Type} (f : A -> B) : Type :=
+  (forall x y, f x = f y -> x = y) * (forall y, {x : A | f x = y}).
 
-Lemma bijection_inv : forall (A B : Type) (f : A -> B), 
-    bijection f -> exists (g : B -> A), forall a, a = g (f a).
+Lemma bijection_inv : forall (A B : Type) (f : A -> B),
+    bijection f -> {g : B -> A & bijection g & forall b, b = f (g b)}.
 Proof.
   intros A B f Hf. unfold bijection in Hf. destruct Hf as [Hf1 Hf2].
-  assert (g : B -> A).
-  - intros b. specialize (Hf2 b).
-Admitted.
+  exists (fun b => proj1_sig (Hf2 b)).
+  - unfold bijection. split.
+    * intros x y. case (Hf2 x). case (Hf2 y). simpl. intros.
+      rewrite <- e. rewrite <- e0. rewrite H. reflexivity.
+    * intro. exists (f y). case (Hf2 (f y)). simpl. auto.
+  - intro.
+  case (Hf2 b). simpl. auto.
+Qed.
 
-
-
-Definition arena_isomorphism {A1 A2 : Arena} (f : @M A1 -> @M A2) : Prop :=
-  bijection f /\ forall m n, (@Q A1 m <-> @Q A2 (f m)) /\ (@O A1 m <-> @O A2 (f m)) /\
+Definition arena_isomorphism {A1 A2 : Arena} (f : @M A1 -> @M A2) : Type :=
+  bijection f * forall m n, (@Q A1 m <-> @Q A2 (f m)) /\ (@O A1 m <-> @O A2 (f m)) /\
                  (@I A1 m <-> @I A2 (f m)) /\ (@enable A1 m n <-> @enable A2 (f m) (f n)).
 
-Definition isomorphic (A1 A2 : Arena) : Prop := exists f, @arena_isomorphism A1 A2 f.
+Definition isomorphic (A1 A2 : Arena) : Type := {f & @arena_isomorphism A1 A2 f}.
 
 Lemma iso_reflexive : forall A, isomorphic A A.
 Proof.
-  intros. unfold isomorphic, arena_isomorphism. exists (fun x => x).
+  intros. unfold isomorphic, arena_isomorphism. exists id.
   split.
   - unfold bijection. intros. split; auto.
     intros. exists y. auto.
@@ -161,18 +164,26 @@ Qed.
 
 Lemma iso_symmetric : forall A1 A2, isomorphic A1 A2 -> isomorphic A2 A1.
 Proof.
-  
-Admitted.
-
-
+  intros A1 A2. unfold isomorphic, arena_isomorphism. intro.
+  destruct X as [f H]. destruct H as [Hb Hi].
+  destruct (bijection_inv _ _ f Hb) as [fi Hf He].
+  exists fi. split. auto.
+  intros. destruct Hf as [Hf1 Hf2].
+  specialize (Hi (fi m) (fi n)). rewrite <- (He m) in Hi. rewrite <- (He n) in Hi.
+  destruct Hi as [Hi1 [Hi2 [Hi3 Hi4] ] ].
+  split. apply iff_sym. tauto.
+  split. apply iff_sym. tauto.
+  split. apply iff_sym. tauto.
+  apply iff_sym. tauto.
+Qed.
 
 
 Lemma iso_transitive : forall A1 A2 A3, isomorphic A1 A2 -> isomorphic A2 A3 -> isomorphic A1 A3.
-  intros. unfold isomorphic, arena_isomorphism.
+  intros A1 A2 A3 H H0. unfold isomorphic, arena_isomorphism.
   destruct H as [f12 [Hbi12 Hiso12] ]. destruct H0 as [f23 [Hbi23 Hiso23] ].
   exists (fun x => f23 (f12 x) ). split; intros; repeat split;
   try (intros; specialize (Hiso12 m n); specialize (Hiso23 (f12 m) (f12 n)); tauto).
-  - intros. unfold bijection in *. destruct Hbi12. apply H0. destruct Hbi23. apply H2. auto.
+  - intros. unfold bijection in *. destruct Hbi12 as [H0 _]. apply H0. destruct Hbi23 as [H2 _]. apply H2. auto.
   - intros. unfold bijection in *. destruct Hbi23 as [ _ Hbi23]. destruct Hbi12 as [ _ Hbi12].
     specialize (Hbi23 y). destruct Hbi23 as [x' Hx']. specialize (Hbi12 x'). destruct Hbi12 as [ x'' Hx''].
     exists x''. subst. auto.
@@ -207,8 +218,8 @@ Proof.
   - exists (inl y). auto.
 Qed.
 
-Lemma unit_left_id_product : forall (A : Arena), exists (f : void + M -> M),
-      @arena_isomorphism (Prod_Arena Unit A) A f.
+Lemma unit_left_id_product : forall (A : Arena),
+        {f : void + M -> M & @arena_isomorphism (Unit ⊗ A) A f}.
   Proof.
     intro A. exists isol. unfold arena_isomorphism, bijection. split.
     - apply isol_bij.
@@ -218,8 +229,8 @@ Lemma unit_left_id_product : forall (A : Arena), exists (f : void + M -> M),
       destruct m; destruct n; try contradiction. simpl in *. constructor. assumption.
   Qed.
 
-Lemma unit_right_id_product : forall (A : Arena), exists (f : M + void -> M),
-        @arena_isomorphism (Prod_Arena A Unit) A f.
+Lemma unit_right_id_product : forall (A : Arena),
+        {f : M + void -> M & @arena_isomorphism (A ⊗ Unit) A f}.
   Proof.
     intros A. exists isor. unfold arena_isomorphism, bijection. split.
     - apply isor_bij.
@@ -229,8 +240,8 @@ Lemma unit_right_id_product : forall (A : Arena), exists (f : M + void -> M),
       destruct m; destruct n; try contradiction. simpl in *. constructor. assumption.
   Qed.
 
-Lemma unit_left_id_exp : forall (A : Arena), exists (f : void + M -> M),
-        @arena_isomorphism (Arrow_Arena Unit A) A f.
+Lemma unit_left_id_exp : forall (A : Arena),
+        {f : void + M -> M & @arena_isomorphism (Unit ↪ A) A f}.
   Proof.
     intros A. exists isol. unfold arena_isomorphism, bijection. split.
     - apply isol_bij.
@@ -270,7 +281,7 @@ Qed.
 
 
 Lemma wf_init_prod : forall (A B : Arena), @Arena_WF A -> @Arena_WF B -> forall m,
-                                               @I (Prod_Arena A B) m -> @Q (Prod_Arena A B) m /\ @O (Prod_Arena A B) m.
+                                               @I (A ⊗ B) m -> @Q (A ⊗ B) m /\ @O (A ⊗ B) m.
 Proof.
   intros A B. intros. simpl in *.
   destruct H as [ Ha _ _ _  ]. destruct H0 as [ Hb _ _ _  ]. inv H1.
@@ -278,7 +289,7 @@ Proof.
   - apply Hb in H. destruct H. split; constructor; auto.
 Qed.
 
-Lemma wf_e1_prod : forall (A B : Arena), @Arena_WF A -> @Arena_WF B -> forall (m n : @M (Prod_Arena A B)),
+Lemma wf_e1_prod : forall (A B : Arena), @Arena_WF A -> @Arena_WF B -> forall (m n : @M (A ⊗ B)),
                                              enable m n -> Q m.
 Proof.
   intros A B. intros. simpl in *. destruct H as [ _ Ha _ _ ]. destruct H0 as [ _ Hb _ _  ].
@@ -287,7 +298,7 @@ Proof.
   - apply Hb in H. constructor. auto.
 Qed.
 
-Lemma wf_e2_prod : forall (A B : Arena), @Arena_WF A -> @Arena_WF B -> forall (m n : @M (Prod_Arena A B)),
+Lemma wf_e2_prod : forall (A B : Arena), @Arena_WF A -> @Arena_WF B -> forall (m n : @M (A ⊗ B)),
                                              enable m n -> O m <-> P n.
 Proof.
   intros A B. intros. simpl in *. destruct H as [ _ _ Ha _  ]. destruct H0 as [ _ _ Hb _  ].
@@ -302,7 +313,7 @@ Proof.
     + intros. constructor. unfold P in H0. apply H. intro. apply H0. constructor; auto.
 Qed.
 
-Lemma wf_e3_prod : forall (A B : Arena), @Arena_WF A -> @Arena_WF B -> forall (m n : @M (Prod_Arena A B)),
+Lemma wf_e3_prod : forall (A B : Arena), @Arena_WF A -> @Arena_WF B -> forall (m n : @M (A ⊗ B)),
                                              enable m n -> ~ I n.
 Proof.
   intros A B. intros. simpl in *. destruct H as [ _ _ _ Ha  ]. destruct H0 as [ _ _ _ Hb ].
@@ -312,7 +323,7 @@ Proof.
 Qed.
 
 
-Lemma wf_prod : forall (A B : Arena), @Arena_WF A -> @Arena_WF B -> @Arena_WF (Prod_Arena A B).
+Lemma wf_prod : forall (A B : Arena), @Arena_WF A -> @Arena_WF B -> @Arena_WF (A ⊗ B).
 Proof.
   intros A B Ha Hb. constructor.
   - apply wf_init_prod; auto.
@@ -322,14 +333,14 @@ Proof.
 Qed.
 
 
-Lemma wf_init_arrow : forall (A B : Arena), @Arena_WF A -> @Arena_WF B -> forall (m : @M (Arrow_Arena A B)),
+Lemma wf_init_arrow : forall (A B : Arena), @Arena_WF A -> @Arena_WF B -> forall (m : @M (A ↪ B)),
                                                 I m -> Q m /\ O m.
 Proof.
   intros A B Ha Hb m Hm. destruct Ha as [ Ha _ _ _ ]. destruct Hb as [ Hb _ _ _ ].
   simpl in *. inv Hm. apply Hb in H. split; constructor; tauto.
 Qed.
 
-Lemma wf_e1_arrow : forall (A B : Arena), @Arena_WF A -> @Arena_WF B -> forall (m n : @M (Arrow_Arena A B)),
+Lemma wf_e1_arrow : forall (A B : Arena), @Arena_WF A -> @Arena_WF B -> forall (m n : @M (A ↪ B)),
                                               enable m n -> Q m.
 Proof.
   intros A B Ha Hb m n Hmn. destruct Ha as [ _ Ha _ _ ]. destruct Hb as [ Hbq Hb _ _  ]. simpl in *.
@@ -340,7 +351,7 @@ Proof.
   - inv H. inv H0. inv H1. constructor. apply Hbq in H. tauto.
 Qed.
 
-Lemma wf_e2_arrow : forall (A B : Arena), @Arena_WF A -> @Arena_WF B -> forall (m n : @M (Arrow_Arena A B)),
+Lemma wf_e2_arrow : forall (A B : Arena), @Arena_WF A -> @Arena_WF B -> forall (m n : @M (A ↪ B)),
                                              enable m n -> O m <-> P n.
 Proof.
   intros A B Ha Hb m n Hmn. split; intros; simpl in *.
@@ -363,7 +374,7 @@ Proof.
     + inv H1. inv H2. constructor. destruct Hb. apply init_WF0 in H0. tauto.
 Qed.
 
-Lemma wf_e3_arrow : forall (A B : Arena), @Arena_WF A -> @Arena_WF B -> forall (m n : @M (Arrow_Arena A B)),
+Lemma wf_e3_arrow : forall (A B : Arena), @Arena_WF A -> @Arena_WF B -> forall (m n : @M (A ↪ B)),
                                               enable m n -> ~ I n.
 Proof.
   intros A B Ha Hb m n Hmn. simpl in *. intro. inv H. inv Hmn.
@@ -372,7 +383,7 @@ Proof.
 Qed.
 
 
-Lemma wf_arrow : forall (A B : Arena), @Arena_WF A -> @Arena_WF B -> @Arena_WF (Arrow_Arena A B).
+Lemma wf_arrow : forall (A B : Arena), @Arena_WF A -> @Arena_WF B -> @Arena_WF (A ↪ B).
 Proof.
   intros A B Ha Hb. constructor.
   - apply wf_init_arrow; auto.
@@ -382,9 +393,9 @@ Proof.
 Qed.
 
 Lemma enable_comp : forall (A B C : Arena) (a : @M A) (b : @M B) (c : @M C),
-    @enable (Arrow_Arena A B)  (inr b) (inl a) ->
-    @enable (Arrow_Arena B C) (inr c) (inl b) ->
-    @enable (Arrow_Arena A C) (inr c) (inl a).
+    @enable (A ↪ B) (inr b) (inl a) ->
+    @enable (B ↪ C) (inr c) (inl b) ->
+    @enable (A ↪ C) (inr c) (inl a).
 Proof.
   intros A B C a b c Hba Hbc.
   (** show that a b and c are all initial *)
@@ -402,8 +413,8 @@ Inductive even : nat -> Prop :=
 
 
 Lemma currying : forall (A B C : Arena),
-    exists (f : @M A + (@M B + @M C) -> (@M A + @M B) + @M C),
-                 @arena_isomorphism  (Arrow_Arena A (Arrow_Arena B C)) (Arrow_Arena (Prod_Arena A B) C) f.
+        {f : @M A + (@M B + @M C) -> (@M A + @M B) + @M C &
+         @arena_isomorphism (A ↪ (B ↪ C)) ((A ⊗ B) ↪ C) f}.
   Proof.
     intros A B C.
     intros.
@@ -492,7 +503,8 @@ Qed.
             end).
 
   (* This should be moved to Utils, it tells auto that it can use the constructors of these inductive to solve goals *)
-  Hint Constructors Sum_Pred Inr_Pred Inl_Pred Sum_Rel Join_Rel Prod_Pred_to_Rel.
+  #[export]
+  Hint Constructors Sum_Pred Inr_Pred Inl_Pred Sum_Rel Join_Rel Prod_Pred_to_Rel : core.
 
   (* The solver reduces, destruct the expressions that are patterned matched on, unfold [P] to make the negations apparent, invert the context and finally calls auto.
      TODO: We should define a Hint DB to reason about these predicates rather than explicitly rely on [auto using].
@@ -505,8 +517,8 @@ Qed.
     auto using Sum_Pred_negL_backward, Sum_Pred_negR_backward.
 
   Lemma currying' : forall (A B C : Arena),
-      exists (f : @M A + (@M B + @M C) -> (@M A + @M B) + @M C),
-        @arena_isomorphism  (Arrow_Arena A (Arrow_Arena B C)) (Arrow_Arena (Prod_Arena A B) C) f.
+          {f : @M A + (@M B + @M C) -> (@M A + @M B) + @M C &
+            @arena_isomorphism  (A ↪ (B ↪ C)) ((A ⊗ B) ↪ C) f}.
   Proof.
     intros A B C.
     exists iso_curry; unfold arena_isomorphism, bijection.
@@ -553,8 +565,8 @@ Section Plays.
     Proof.
       intros. induction p; simpl; auto.
       destruct a. simpl in H. destruct (k =? S (length p)) eqn : Heq.
-      - apply Nat.eqb_eq in Heq. omega.
-      - apply IHp. omega.
+      - apply Nat.eqb_eq in Heq. lia.
+      - apply IHp. lia.
     Qed.
 
   Lemma wf_points_to_dec : forall (M : Type) (p : pointer_sequence M), pointer_sequence_wf p ->
@@ -564,15 +576,15 @@ Section Plays.
       - simpl. unfold decreasing. intros. auto.
       - simpl. unfold decreasing. intros. destruct n0 as [ | x]; auto.
         + left. destruct ( 0 =? S (length p)) eqn : Heq; try discriminate.
-          unfold decreasing in *. specialize ( IHpointer_sequence_wf 0); omega.
+          unfold decreasing in *. specialize ( IHpointer_sequence_wf 0); lia.
         + unfold decreasing in *.  specialize (IHpointer_sequence_wf (S x)).
           destruct IHpointer_sequence_wf as [H0  | H0]; destruct Hn.
           * rewrite H0. rewrite H1. left. destruct  (S x =? S (@length (pointer M0) p)); auto.
-          * rewrite H0. right. destruct  (S x =? S (@length (pointer M0) p)) eqn : Heq; try omega.
-            apply Nat.eqb_eq in Heq. omega.
-          * rewrite H1. right. destruct ( S x =? S (@length (pointer M0) p)); auto; omega.
-          * right. destruct ( S x =? S (@length (pointer M0) p)) eqn : Heq; try omega.
-            apply Nat.eqb_eq in Heq. omega.
+          * rewrite H0. right. destruct  (S x =? S (@length (pointer M0) p)) eqn : Heq; try lia.
+            apply Nat.eqb_eq in Heq. lia.
+          * rewrite H1. right. destruct ( S x =? S (@length (pointer M0) p)); auto; lia.
+          * right. destruct ( S x =? S (@length (pointer M0) p)) eqn : Heq; try lia.
+            apply Nat.eqb_eq in Heq. lia.
     Qed.
 
 
@@ -581,7 +593,7 @@ Section Plays.
       Proof.
         induction p.
         - simpl. unfold decreasing. intros; left; auto.
-        -
+        - simpl. unfold decreasing. intros. left. specialize (H n0). case H.
       Admitted.
 
     Lemma dec_points_to_wf : forall (M : Type) (p : pointer_sequence M), decreasing (extract_points_to_fun p) ->
@@ -592,12 +604,12 @@ Section Plays.
         - destruct a as [m n]. apply cons_wf.
           + apply IHp. simpl in H. clear IHp. unfold decreasing in *. intros k. specialize (H k).
             destruct H; destruct (k =? S (length p)) eqn : Heq; try tauto.
-            * apply Nat.eqb_eq in Heq. left. apply extract_gt_length. omega.
-            * apply Nat.eqb_eq in Heq. left. apply extract_gt_length. omega.
+            * apply Nat.eqb_eq in Heq. left. apply extract_gt_length. lia.
+            * apply Nat.eqb_eq in Heq. left. apply extract_gt_length. lia.
           + apply dec_points_to_cons in H as H1. unfold decreasing in H1, H. simpl in H.
             specialize (H n).
             destruct (n =? S (length p)) eqn : Heq.
-            * destruct H; omega.
+            * destruct H; lia.
             * fold decreasing in H1.
 
             simpl in H. unfold decreasing in H.
@@ -609,18 +621,18 @@ Section Plays.
                  ++ specialize (H n). rewrite Heq in H.
                     d
                     simpl in H0. simpl in H. simpl. specialize (H n).
-                    destruct (n =? 1); destruct H; try omega.
+                    destruct (n =? 1); destruct H; try lia.
                     ** left.
 
             unfold decreasing in H. right.
 
             simpl in H. specialize (H n) as H'.
             destruct (n =? S (length p)) eqn : Heq.
-            * apply Nat.eqb_eq in Heq. destruct H'; omega.
+            * apply Nat.eqb_eq in Heq. destruct H'; lia.
             * assert (decreasing (extract_points_to_fun p)). admit. apply IHp in H1.
               -- clear H'. clear H0. simpl in H. specialize (H n). simpl in Heq. rewrite Heq in H.
               destruct H.
-              -- omega.*)
+              -- lia.*)
       Admitted.
 
   Record play (A : Arena) (p: pointer_sequence M): Prop :=
@@ -662,15 +674,15 @@ Section Plays.
       strategy_from_next_move A next p ->
       play A (snoc p (m,a)) ->
       strategy_from_next_move A next (snoc p (m,a)).
-  Hint Constructors strategy_from_next_move.
+  Hint Constructors strategy_from_next_move : core.
 
   Lemma nil_is_play: forall A, play A [].
   Proof.
     split; intros.
-    - inv H; exfalso; eauto.
+    - inv H; exfalso; apply snoc_not_nil_l in H2; tauto.
     - inv H; exfalso; eauto.
   Qed.
-  Hint Resolve nil_is_play.
+  Hint Resolve nil_is_play : core.
 
   Lemma strategy_from_next_move_wf:
     forall A next, next_move_wf A next ->
@@ -680,7 +692,7 @@ Section Plays.
     - induction p as [| [m a] p IH] using rev_ind; auto.
       intros ?.
       inv H.
-      + exfalso; eauto.
+      + exfalso; apply snoc_not_nil_l in H1; tauto.
       + apply nextWF; auto.
         apply snoc_inj in H0; destruct H0; subst; auto.
       + apply snoc_inj in H0; destruct H0; subst; auto.
@@ -701,7 +713,7 @@ Section Plays.
       s_least_strategy: forall s', strategy_wf A s' -> generators ⊆ s' -> s ⊆ s'
     }.
 
-  Fixpoint deletion (A : Arena) (p: pointer_sequence M): pointer_sequence M :=
+  Definition deletion (A : Arena) (p: pointer_sequence M): pointer_sequence M :=
     match view p with
     | Nil => []
     | Snoc x p => []
@@ -717,7 +729,7 @@ Section Plays.
   Lemma decreasing_zero : forall f, decreasing f -> f 0 = 0.
     Proof.
       intros. unfold decreasing in *. specialize (H 0).
-      destruct H; auto. omega.
+      destruct H; auto. lia.
     Qed.
 
   Lemma redirect_pres_decrease : forall f n, decreasing f -> decreasing (redirect n f).
@@ -728,10 +740,10 @@ Section Plays.
     destruct (f m =? n) eqn: Hfmn.
     - apply Hnat in Hfmn. rewrite <- Hfmn.
       specialize (Hdec (f m)) as Hfm. destruct Hfm; try tauto.
-      specialize (Hdec m) as Hm. destruct Hm; omega.
+      specialize (Hdec m) as Hm. destruct Hm; lia.
     - specialize (Nat.eqb_neq) as Hnat'. clear Hfmn.
       destruct (n <? f m) eqn : Hfmn.
-      + specialize (Hdec m). destruct Hdec; omega.
+      + specialize (Hdec m). destruct Hdec; lia.
       + apply Hdec.
    Qed.
 
@@ -748,7 +760,7 @@ Section Plays.
                   then (p', redirect (length p + 1) f )
                   else (x :: p',f) end.
 
-  Fixpoint delete {M : Type} (p : pointer_sequence M) (X : M -> bool) : pointer_sequence M :=
+  Definition delete {M : Type} (p : pointer_sequence M) (X : M -> bool) : pointer_sequence M :=
     let (p',f) := delete_fun p X in
     map (fun x => match x with pair m n => (m, f n) end) p'.
 
@@ -756,7 +768,7 @@ Section Plays.
       map fst (fst (delete_fun p X)) = map fst (delete p X).
     Proof.
       intros. induction p; auto.
-      simpl. destruct a eqn : Heqa. destruct (delete_fun p X) eqn : Heqdel.
+      unfold delete. simpl. destruct a eqn : Heqa. destruct (delete_fun p X) eqn : Heqdel.
       destruct (X m) eqn: Hm; simpl.
       - simpl in *. clear Hm Heqa Heqdel IHp.
         induction p0; auto. simpl. rewrite <- IHp0. destruct a0. simpl. auto.
@@ -814,7 +826,7 @@ Section Plays.
   Proof.
     intros. induction H.
     - simpl. constructor.
-    - simpl. destruct (X m) eqn : Hx.
+    - unfold delete. simpl. destruct (X m) eqn : Hx.
       + destruct (delete_fun p X) eqn : Heq.
         destruct ( (map
        (fun x : M * nat =>
@@ -1056,10 +1068,10 @@ Section Composition.
 
   Definition delete_left_lower' {A B : Type} (l : pointer_sequence (A + B)) : pointer_sequence B :=
     take_right (delete l is_leftb).
-  
+
   Definition delete_right_lower' {A B : Type} (l : pointer_sequence (A + B)) : pointer_sequence A :=
     take_left (delete l is_rightb).
-                                                                       
+
 
 
   Definition interaction (M N : Type) (tau : pointer_sequence M -> Prop) (sigma : pointer_sequence N -> Prop)

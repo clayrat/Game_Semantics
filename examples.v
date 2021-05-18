@@ -19,7 +19,7 @@ Section Cell_Game.
   Inductive Cell_Event :=
   | RdC
   | WrC (_: nat)
-  | WrS 
+  | WrS
   | RdS (_: nat).
 
   Notation state_cell := (list Cell_Event).

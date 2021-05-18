@@ -8,7 +8,7 @@ Import MonadNotation.
 Open Scope monad_scope.
 
 (**
-   We consider games with exactly two players 
+   We consider games with exactly two players
    When relevant, we will take the convention that P1 is the first player to play.
  *)
 Inductive player := P1 | P2.
@@ -24,7 +24,7 @@ Definition opp p := match p with | P1 => P2 | P2 => P1 end.
 
 Class Game :=
   {
-    state:> Type;
+    state: Type;
     initial_state: state;
     move: player -> state -> state -> Prop
   }.
@@ -65,7 +65,7 @@ Section Game_Basics.
      A strategy is a decision procedure that tells a player which move to make
      in a given state of the game.
    *)
-  Definition strategy (p: player) := state -> option state. 
+  Definition strategy (p: player) := state -> option state.
 
   (**
      For this strategy to make any sense, it has to exclusively
@@ -106,7 +106,7 @@ Section Game_Constructions.
         initial_state := tt;
         move := Empty_move
       |}.
-    Hint Constructors Empty_move.
+    Hint Constructors Empty_move : core.
 
     (* Of course, [Empty_Game] does not admit a winning strategy. *)
     Lemma Empty_Game_cannot_win:
@@ -134,7 +134,7 @@ Section Game_Constructions.
         initial_state := inl tt;
         move := Unit_move
       |}.
-    Hint Constructors Unit_move.
+    Hint Constructors Unit_move : core.
 
     (* [Unit_Game] admits a trivial winning strategy: *)
     Definition Unit_strategy: @strategy Unit_Game P1 :=
@@ -173,13 +173,13 @@ Section Game_Constructions.
         move p σ σ' ->
         Sum_move p (inr (inr σ)) (inr (inr σ'))
     .
-    Hint Constructors Sum_move.
+    Hint Constructors Sum_move : core.
 
     Definition Sum_Game: Game :=
       {|
         state := unit + (@state G1 + @state G2);
         initial_state := inl tt;
-        move := Sum_move 
+        move := Sum_move
       |}.
 
     Definition Sum_strategy_L (p: player) (s: @strategy G1 p): @strategy Sum_Game p :=
@@ -187,7 +187,7 @@ Section Game_Constructions.
             | inl _ =>
               'σ <- s initial_state;;
               ret (inr (inl σ))
-            | inr (inl σ) => 
+            | inr (inl σ) =>
               'σ' <- s σ;;
               ret (inr (inl σ'))
             | inr (inr _) => None
@@ -204,7 +204,7 @@ Section Game_Constructions.
       intros ? EQ; inv EQ.
       econstructor; cbn.
       - rewrite EQs; reflexivity.
-      - auto. 
+      - auto.
       - intros σ'' MOVE.
         inv MOVE.
         eapply H; eauto.
@@ -213,7 +213,7 @@ Section Game_Constructions.
     Lemma Sum_strategy_L_is_winning:
       forall p (s: @strategy G1 p),
         winning_strategy s ->
-        winning_strategy (Sum_strategy_L p s). 
+        winning_strategy (Sum_strategy_L p s).
     Proof.
       unfold winning_strategy, initial_state at 2; cbn; intros p s WIN.
       inv WIN.
@@ -230,7 +230,7 @@ Section Game_Constructions.
             | inl _ =>
               'σ <- s initial_state;;
               ret (inr (inr σ))
-            | inr (inr σ) => 
+            | inr (inr σ) =>
               'σ' <- s σ;;
               ret (inr (inr σ'))
             | inr (inl _) => None
@@ -247,7 +247,7 @@ Section Game_Constructions.
       intros ? EQ; inv EQ.
       econstructor; cbn.
       - rewrite EQs; reflexivity.
-      - auto. 
+      - auto.
       - intros σ'' MOVE.
         inv MOVE.
         eapply H; eauto.
@@ -256,7 +256,7 @@ Section Game_Constructions.
     Lemma Sum_strategy_R_is_winning:
       forall p (s: @strategy G2 p),
         winning_strategy s ->
-        winning_strategy (Sum_strategy_R p s). 
+        winning_strategy (Sum_strategy_R p s).
     Proof.
       unfold winning_strategy, initial_state at 2; cbn; intros p s WIN.
       inv WIN.
@@ -271,7 +271,7 @@ Section Game_Constructions.
   End Sum_Game.
 
   Section Prod_Game.
-    
+
     Context {G1 G2: Game}.
 
     (**
@@ -294,14 +294,14 @@ Section Game_Constructions.
       {|
         state := (@state G1 * @state G2);
         initial_state := (initial_state, initial_state);
-        move := Prod_move 
+        move := Prod_move
       |}.
 
     Definition Prod_strategy (p: player) (s1: @strategy G1 p) (s2: @strategy G2 p): @strategy Prod_Game p :=
       fun σ => let '(σ1,σ2) := σ in
             match s1 σ1 with
             | None => 'σ2' <- s2 σ2;;
-                     ret (σ1,σ2')    
+                     ret (σ1,σ2')
             | Some σ1' => ret (σ1',σ2)
             end.
 
@@ -337,7 +337,7 @@ Section Game_Constructions.
     Inductive Dual_move: player -> state -> state -> Prop :=
     | Dual_Move: forall p σ1 σ2,
         move p σ1 σ2 -> Dual_move (opp p) σ1 σ2.
-    Hint Constructors Dual_move.
+    Hint Constructors Dual_move : core.
 
     Definition Dual_Game: Game :=
       {|
@@ -345,7 +345,7 @@ Section Game_Constructions.
         initial_state := initial_state;
         move := Dual_move
       |}.
-    
+
     Definition Dual_strategy {p: player} (s: strategy p): @strategy Dual_Game (opp p) := s.
 
     Lemma opp_involutive:
@@ -369,7 +369,7 @@ Section Game_Constructions.
     Qed.
 
     Lemma Dual_strategy_is_winning:
-      forall p (s: strategy p), 
+      forall p (s: strategy p),
         winning_strategy s ->
         winning_strategy (Dual_strategy s).
     Proof.

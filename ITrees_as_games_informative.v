@@ -11,7 +11,7 @@ Section ITrees.
 
   (**
      Let's work with inductive trees for now.
-     
+
    *)
 
   Inductive itree (E: Type -> Type) (X: Type): Type :=
